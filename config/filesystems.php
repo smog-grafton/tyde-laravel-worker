@@ -1,6 +1,12 @@
 <?php
 
-$publicBaseUrl = rtrim((string) env('FFMPEG_WORKER_PUBLIC_BASE_URL', env('APP_URL', 'http://localhost')), '/');
+$envOrDefault = static function (string $key, mixed $default): mixed {
+    $value = env($key);
+
+    return blank($value) ? $default : $value;
+};
+
+$publicBaseUrl = rtrim((string) $envOrDefault('FFMPEG_WORKER_PUBLIC_BASE_URL', env('APP_URL', 'http://localhost')), '/');
 
 return [
 
@@ -51,14 +57,14 @@ return [
 
         'telegram-intake' => [
             'driver' => 'local',
-            'root' => env('FFMPEG_WORKER_INTAKE_ROOT', storage_path('app/telegram-intake')),
+            'root' => $envOrDefault('FFMPEG_WORKER_INTAKE_ROOT', storage_path('app/telegram-intake')),
             'throw' => false,
             'report' => false,
         ],
 
         'media' => [
             'driver' => 'local',
-            'root' => env('FFMPEG_WORKER_DELIVERY_ROOT', storage_path('app/public/media')),
+            'root' => $envOrDefault('FFMPEG_WORKER_DELIVERY_ROOT', storage_path('app/public/media')),
             'url' => $publicBaseUrl.'/storage/media',
             'visibility' => 'public',
             'throw' => false,
@@ -67,7 +73,7 @@ return [
 
         'streaming' => [
             'driver' => 'local',
-            'root' => env('FFMPEG_WORKER_STREAMING_ROOT', storage_path('app/public/streaming')),
+            'root' => $envOrDefault('FFMPEG_WORKER_STREAMING_ROOT', storage_path('app/public/streaming')),
             'url' => $publicBaseUrl.'/storage/streaming',
             'visibility' => 'public',
             'throw' => false,
@@ -76,7 +82,7 @@ return [
 
         'thumbnails' => [
             'driver' => 'local',
-            'root' => env('FFMPEG_WORKER_THUMBNAILS_ROOT', storage_path('app/public/thumbnails')),
+            'root' => $envOrDefault('FFMPEG_WORKER_THUMBNAILS_ROOT', storage_path('app/public/thumbnails')),
             'url' => $publicBaseUrl.'/storage/thumbnails',
             'visibility' => 'public',
             'throw' => false,

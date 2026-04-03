@@ -338,13 +338,19 @@ class MediaPipelineService
             $resolvedFilename = $this->resolveRemoteFilename(
                 $effectiveUrl,
                 $media->id,
-                $this->contentDispositionFilename($contentDisposition) ?: $media->original_filename
+                $this->contentDispositionFilename($contentDisposition) ?: $media->original_filename,
+                $responseContentType ?: $mimeType,
             );
             $relativePath = sprintf('%s/%d-%s', $relativeDirectory, $media->id, $resolvedFilename);
             $size = (int) filesize($partialAbsolutePath);
             $mimeType = @mime_content_type($partialAbsolutePath) ?: ($responseContentType ?: 'application/octet-stream');
             $preferredExtension = $this->extensionFromMimeType($mimeType);
             $currentExtension = strtolower((string) pathinfo($relativePath, PATHINFO_EXTENSION));
+            $resolvedParse = $this->filenameParser->parse($resolvedFilename);
+            $currentOriginalExtension = strtolower((string) pathinfo((string) $media->original_filename, PATHINFO_EXTENSION));
+            $shouldRefreshIdentity = !$this->isVideoFilename((string) $media->original_filename)
+                || $currentOriginalExtension === 'php';
+            $resolvedTitle = trim((string) ($resolvedParse['title_guess'] ?? '')) ?: null;
 
             if ($preferredExtension && $currentExtension === '') {
                 $relativePath .= '.'.$preferredExtension;
@@ -372,6 +378,11 @@ class MediaPipelineService
             ];
 
             $media->forceFill([
+                'title' => $shouldRefreshIdentity ? $resolvedTitle : $media->title,
+                'slug' => $shouldRefreshIdentity
+                    ? Str::slug((string) (($resolvedTitle ?: pathinfo($resolvedFilename, PATHINFO_FILENAME)) ?: 'media'))
+                    : $media->slug,
+                'original_filename' => $shouldRefreshIdentity ? $resolvedFilename : $media->original_filename,
                 'source_disk' => $sourceDisk,
                 'source_path' => $relativePath,
                 'source_host' => parse_url($effectiveUrl, PHP_URL_HOST) ?: (parse_url($sourceUrl, PHP_URL_HOST) ?: null),
@@ -557,20 +568,97 @@ class MediaPipelineService
         return [];
     }
 
-    private function resolveRemoteFilename(string $sourceUrl, ?int $mediaId = null, ?string $preferred = null): string
+    private function resolveRemoteFilename(string $sourceUrl, ?int $mediaId = null, ?string $preferred = null, ?string $contentType = null): string
     {
-        if (filled($preferred)) {
-            return $this->filenameParser->sanitize((string) $preferred);
+        $fallbackExtension = $this->extensionFromMimeType($contentType) ?? 'mp4';
+        $preferredCandidate = $this->sanitizeFilenameCandidate($preferred);
+
+        if ($this->isVideoFilename($preferredCandidate)) {
+            return $preferredCandidate;
         }
 
         $urlPath = (string) parse_url($sourceUrl, PHP_URL_PATH);
-        $candidate = basename($urlPath);
+        $pathCandidate = $this->sanitizeFilenameCandidate(basename($urlPath));
 
-        if ($candidate !== '' && $candidate !== '/') {
-            return $this->filenameParser->sanitize(urldecode($candidate));
+        if ($this->isVideoFilename($pathCandidate)) {
+            return $pathCandidate;
         }
 
-        return sprintf('remote-source-%s.mp4', $mediaId ?: Str::ulid()->toBase32());
+        $queryCandidate = $this->queryFilenameCandidate($sourceUrl);
+
+        if ($this->isVideoFilename($queryCandidate)) {
+            return $queryCandidate;
+        }
+
+        if ($preferredCandidate !== null) {
+            return $this->attachFallbackExtension($preferredCandidate, $fallbackExtension, $mediaId);
+        }
+
+        if ($pathCandidate !== null) {
+            return $this->attachFallbackExtension($pathCandidate, $fallbackExtension, $mediaId);
+        }
+
+        return sprintf('remote-source-%s.%s', $mediaId ?: Str::ulid()->toBase32(), $fallbackExtension);
+    }
+
+    private function queryFilenameCandidate(string $sourceUrl): ?string
+    {
+        $query = (string) parse_url($sourceUrl, PHP_URL_QUERY);
+
+        if ($query === '') {
+            return null;
+        }
+
+        parse_str($query, $queryParams);
+
+        foreach (['file', 'filename', 'name', 'title', 'download', 'url', 'path'] as $key) {
+            $candidateValue = $queryParams[$key] ?? null;
+
+            if (!is_string($candidateValue) || trim($candidateValue) === '') {
+                continue;
+            }
+
+            $candidate = $this->sanitizeFilenameCandidate(basename($candidateValue));
+
+            if ($candidate !== null) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function sanitizeFilenameCandidate(?string $filename): ?string
+    {
+        if (!is_string($filename) || trim($filename) === '' || $filename === '/') {
+            return null;
+        }
+
+        return $this->filenameParser->sanitize(urldecode($filename));
+    }
+
+    private function isVideoFilename(?string $filename): bool
+    {
+        if (!is_string($filename) || trim($filename) === '') {
+            return false;
+        }
+
+        return in_array(
+            strtolower((string) pathinfo($filename, PATHINFO_EXTENSION)),
+            ['mp4', 'm4v', 'mov', 'mkv', 'webm', 'avi', 'mpeg', 'mpg', 'ts'],
+            true,
+        );
+    }
+
+    private function attachFallbackExtension(string $candidate, string $fallbackExtension, ?int $mediaId): string
+    {
+        $base = trim((string) pathinfo($candidate, PATHINFO_FILENAME));
+
+        if ($base === '') {
+            $base = sprintf('remote-source-%s', $mediaId ?: Str::ulid()->toBase32());
+        }
+
+        return $this->filenameParser->sanitize($base.'.'.$fallbackExtension);
     }
 
     private function remoteRequest(): PendingRequest

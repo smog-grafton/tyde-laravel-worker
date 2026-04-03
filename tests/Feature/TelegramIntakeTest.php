@@ -72,4 +72,25 @@ class TelegramIntakeTest extends TestCase
 
         Queue::assertPushed(FetchRemoteMediaJob::class);
     }
+
+    public function test_it_extracts_the_real_filename_from_query_style_remote_urls(): void
+    {
+        config()->set('ffmpeg-worker.ingest_token', 'secret-token');
+
+        Queue::fake();
+
+        $response = $this->withToken('secret-token')->postJson('/api/v1/media/telegram-intake', [
+            'source_url' => 'https://mobifliks.info/downloadmp4.php?file=luganda/Top%20Gun-%20Maverick%20by%20Vj%20Junior%20-%20Mobifliks.com.mp4',
+            'queue_outputs' => true,
+        ]);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('ok', true);
+
+        $this->assertDatabaseHas('media_items', [
+            'source_type' => 'remote_fetch',
+            'original_filename' => 'Top Gun- Maverick by Vj Junior - Mobifliks.com.mp4',
+        ]);
+    }
 }
