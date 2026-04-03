@@ -34,6 +34,12 @@ render_nginx_config() {
     mv /tmp/default.conf /etc/nginx/conf.d/default.conf
 }
 
+ensure_package_manifest() {
+    if [ ! -f bootstrap/cache/packages.php ] || [ ! -f bootstrap/cache/services.php ]; then
+        php artisan package:discover --ansi
+    fi
+}
+
 run_migrations_if_enabled() {
     if truthy "${APP_RUN_MIGRATIONS:-false}"; then
         php artisan migrate --force
@@ -57,6 +63,7 @@ role="${APP_RUNTIME_ROLE:-web}"
 
 ensure_writable_paths
 require_app_key
+ensure_package_manifest
 
 case "$role" in
     web)

@@ -25,22 +25,16 @@ ENV APP_RUNTIME_ROLE=web \
 
 WORKDIR /var/www/html
 
+COPY --from=ghcr.io/mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/local/bin/
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ffmpeg \
     git \
-    libfreetype6-dev \
-    libicu-dev \
-    libjpeg62-turbo-dev \
-    libpng-dev \
-    libsqlite3-dev \
-    libxml2-dev \
-    libzip-dev \
     nginx \
     tini \
     unzip \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j"$(nproc)" \
+    && install-php-extensions \
         bcmath \
         exif \
         gd \
@@ -93,10 +87,7 @@ RUN mkdir -p \
         /run/php \
     && rm -rf public/storage \
     && chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh \
-    && chown -R www-data:www-data bootstrap/cache storage /run/php \
-    && php artisan package:discover --ansi \
-    && php artisan filament:upgrade \
-    && composer dump-autoload --optimize --no-dev
+    && chown -R www-data:www-data bootstrap/cache storage /run/php
 
 EXPOSE 8080
 
