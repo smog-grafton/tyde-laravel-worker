@@ -2,6 +2,8 @@
 
 Use this when you want `ffmpeg-worker` deployed as a proper Docker image in Coolify. The repo now includes a production `Dockerfile` that installs FFmpeg in the container and can run as `web`, `queue`, or `scheduler` from the same image.
 
+If telebot already runs in its own Coolify container, treat that as a separate filesystem by default. Use telebot `CDN_HANDOFF_MODE=source_url` unless you intentionally mount one shared intake volume into both services.
+
 ## What the image does
 
 - Builds frontend assets with Vite
